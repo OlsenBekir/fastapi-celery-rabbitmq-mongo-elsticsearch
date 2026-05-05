@@ -1,0 +1,80 @@
+version: "3.9"
+
+services:
+  fastapi:
+    build: .
+    ports:
+      - "8000:8000"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+      mongo-db:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+    environment:
+      - MONGO_URL=mongodb://mongo-db:27017
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    restart: always
+
+  mongo-db:
+    image: mongo:7
+    ports:
+      - "27019:27017"
+    volumes:
+      - mongo_data:/data/db
+    restart: always
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    restart: always
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    ports:
+      - "9200:9200"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    restart: always
+
+  celery-worker:
+    build: .
+    depends_on:
+      - rabbitmq
+      - mongo-db
+      - elasticsearch
+    environment:
+      - MONGO_URL=mongodb://mongo-db:27017
+      - CELERY_BROKER_URL=pyamqp://guest:guest@rabbitmq:5672//
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+    command: celery -A tasks worker --loglevel=info -Q celery
+    restart: always
+
+  celery-indexing-worker:
+    build: .
+    depends_on:
+      - rabbitmq
+      - mongo-db
+      - elasticsearch
+    environment:
+      - MONGO_URL=mongodb://mongo-db:27017
+      - CELERY_BROKER_URL=pyamqp://guest:guest@rabbitmq:5672//
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+    command: celery -A tasks worker --loglevel=info -Q indexing --concurrency=1
+    restart: always
+
+volumes:
+  mongo_data:
+  es_data:
