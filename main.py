@@ -9,7 +9,8 @@ from mongo_indexes import ensure_mongo_indexes
 from search import ensure_index, es
 from config import ELASTICSEARCH_INDEX
 from tasks import save_message_async, reindex_all_messages
-
+import time
+#  finn
 
 from tasks import reindex_all_messages_bulk
 
@@ -25,7 +26,10 @@ def startup():
 
 @app.post("/melding_async")
 def create_melding_async(melding: Melding):
+    
     task = save_message_async.delay(melding.melding)
+
+
     return {
         "status": "queued",
         "task_id": task.id

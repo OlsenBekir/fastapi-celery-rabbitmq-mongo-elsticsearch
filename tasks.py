@@ -4,6 +4,10 @@ from celery_app import celery_app
 from database import messages_collection, jobs_collection
 from search import es
 from config import ELASTICSEARCH_INDEX
+import time
+import asyncio
+
+
 
 def utcnow():
     return datetime.now(timezone.utc)
@@ -217,7 +221,7 @@ def reindex_all_messages_bulk(self):
 def save_message_async(self, melding: str):
     task_id = self.request.id
     now = utcnow()
-
+     
     jobs_collection.update_one(
         {"task_id": task_id},
         {
@@ -249,10 +253,9 @@ def save_message_async(self, melding: str):
         },
         upsert=True
     )
-
+    time.sleep(8)
     doc = messages_collection.find_one({"task_id": task_id})
     mongo_id = str(doc["_id"])
-
     es.index(
         index=ELASTICSEARCH_INDEX,
         id=mongo_id,
